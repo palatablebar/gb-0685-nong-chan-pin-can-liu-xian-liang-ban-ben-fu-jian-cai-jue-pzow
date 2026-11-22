@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% block content %}
+<div class="slips">
+  <section class="panel wide">
+    <header><h2>定向补正裁决</h2><span>基线批次 {{run.run_id if run else '—'}}</span></header>
+    <div style="padding:16px">
+      <p style="font-size:11px;color:var(--ink-muted);margin:0 0 14px">
+        补正仅重放“目标报告 + 引用它的复检闭包”，闭包外已签结论逐项冻结；补正失败自动回滚，旧版结果与全部隔离原因留档。
+      </p>
+      <form id="correction-form">
+        <label>补正目标（隔离报告ID）
+          <select name="target_id">
+            {% for t in targets %}<option value="{{t.id}}">{{t.id}} · 隔离原因 {{t.reason_codes|join('/')}}</option>{% endfor %}
+          </select>
+        </label>
+        <label>补正后的单行报告（CSV，含表头同列；身份/关联字段冻结：{{frozen|join('、')}}）
+          <textarea name="csv" rows="4" placeholder="粘贴补正后的完整一行 CSV"></textarea>
+        </label>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <button type="button" id="correction-preview">预演范围</button>
+          <button type="button" id="correction-apply">提交补正</button>
+        </div>
+      </form>
+      <div id="correction-result" style="margin-top:16px"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <header><h2>补正台账</h2><span>{{data.corrections|length if data and data.corrections else 0}} 次</span></header>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>目标</th><th>来源行</th><th>原隔离原因</th><th>改动字段</th><th>闭包</th><th>基线→补正批次</th></tr></thead>
+        <tbody>
+        {% if data and data.corrections %}{% for c in data.corrections %}
+          <tr>
+            <td>{{c.target_id}}</td><td class="num">{{c.line}}</td>
+            <td><span class="reject">{{c.reason_codes|join('/')}}</span></td>
+            <td>{{c.changed_fields|join('、')}}</td>
+            <td>{{c.closure|join('、')}}</td>
+            <td style="font-size:10px">{{c.base_run_id}} → {{c.new_run_id}}</td>
+          </tr>
+        {% endfor %}{% else %}<tr><td colspan="6">暂无补正记录</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="slip-tail">留档 / CORRECTION LEDGER</div>
+  </section>
+
+  {% include "quarantine_slip.html" %}
+</div>
+{% endblock %}

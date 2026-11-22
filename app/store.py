@@ -1,4 +1,4 @@
-import sqlite3,json,os
+import sqlite3,json,os,hashlib
 from pathlib import Path
 from app.errors import DomainError
 
@@ -8,6 +8,7 @@ def connection():
     db.execute('PRAGMA journal_mode=WAL')
     db.execute('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, body TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, decision TEXT NOT NULL DEFAULT "待复核")')
     db.execute('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+    db.execute('CREATE TABLE IF NOT EXISTS corrections (id INTEGER PRIMARY KEY AUTOINCREMENT, base_run_id TEXT NOT NULL, new_run_id TEXT NOT NULL, target_id TEXT NOT NULL, fingerprint TEXT NOT NULL, UNIQUE(base_run_id,fingerprint))')
     return db
 
 def save(run_id, body):
@@ -15,6 +16,39 @@ def save(run_id, body):
         db.execute('INSERT OR IGNORE INTO runs(id,body) VALUES (?,?)',(run_id,json.dumps(body,ensure_ascii=False)))
         db.execute("INSERT INTO meta(key,value) VALUES ('latest',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(run_id,))
     return get(run_id)
+
+def _fingerprint(target_id, replacement):
+    if isinstance(replacement,dict):
+        payload=json.dumps(replacement,sort_keys=True,ensure_ascii=False)
+    else:
+        payload=str(replacement)
+    return hashlib.sha256((target_id+'|'+payload).encode('utf-8')).hexdigest()
+
+def find_correction(base_run_id, target_id, replacement):
+    """同一基线对同一目标的同一补正内容只产生一个批次（幂等）。"""
+    fp=_fingerprint(target_id,replacement)
+    with connection() as db:
+        row=db.execute('SELECT new_run_id FROM corrections WHERE base_run_id=? AND fingerprint=?',(base_run_id,fp)).fetchone()
+    return get(row['new_run_id']) if row else None
+
+def save_correction(base_run_id, candidate, target_id=None, replacement=None, fingerprint=None):
+    """原子落盘：候选批次已在库外完整重放并通过越界校验后才调用。
+
+    旧批次原样保留（runs 仅 INSERT OR IGNORE，从不删除/覆盖），
+    latest 指针在同一事务内切换；任何异常都会回滚，旧版结果继续有效。
+    """
+    fp=fingerprint or _fingerprint(target_id or candidate['corrections'][-1]['target_id'],replacement)
+    target=target_id or candidate['corrections'][-1]['target_id']
+    with connection() as db:
+        db.execute('INSERT OR IGNORE INTO runs(id,body) VALUES (?,?)',(candidate['run_id'],json.dumps(candidate,ensure_ascii=False)))
+        db.execute('INSERT OR IGNORE INTO corrections(base_run_id,new_run_id,target_id,fingerprint) VALUES (?,?,?,?)',(base_run_id,candidate['run_id'],target,fp))
+        db.execute("INSERT INTO meta(key,value) VALUES ('latest',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(candidate['run_id'],))
+    return get(candidate['run_id'])
+
+def correction_chain(run_id):
+    with connection() as db:
+        rows=db.execute('SELECT base_run_id,new_run_id,target_id FROM corrections WHERE base_run_id=? OR new_run_id=? ORDER BY id',(run_id,run_id)).fetchall()
+    return [dict(r) for r in rows]
 
 def get(run_id):
     with connection() as db:r=db.execute('SELECT * FROM runs WHERE id=?',(run_id,)).fetchone()

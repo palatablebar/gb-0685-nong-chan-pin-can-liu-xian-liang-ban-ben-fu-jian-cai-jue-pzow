@@ -13,6 +13,7 @@
 | M5 复检裁决 | 查看并复算复检裁决 | `/api/m5_calculate` | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py` |
 | M6 批次判级 | 查看并复算批次判级 | `/api/m6_reconcile` | `app/modules/m6_reconcile/compare.py` | `tests/test_reconcile.py` |
 | M7 报告归档 | 查看并复算报告归档 | `/api/m7_archive` | `app/modules/m7_archive/export_out.py` | `tests/test_archive.py` |
+| M8 定向补正 | 隔离报告补正与闭包重放 | `/api/m8_correction/apply` | `app/modules/m8_correction/rules.py` | `tests/test_correction.py` |
 
 ## 陷阱登记
 
@@ -32,6 +33,10 @@
 | TRAP-15 | ug/kg与mg/kg | 差1000倍 | 浓度统一mg/kg | `app/modules/m4_segments/rules.py` | `tests/test_segments.py::test_unit_conversion` |
 | TRAP-25 | 标准时间边界 | 双版或错版 | 采样日半开区间选版 | `app/modules/m3_versions/standards.py` | `tests/test_versions.py::test_halfopen_effective` |
 | TRAP-20 | 复检引用环 | 遍历无法结束 | 引用路径检测 | `app/modules/m5_calculate/rules.py` | `tests/test_calculate.py::test_cycle_rejected` |
+| TRAP-30 | 整批重跑改换已签结论 | 全量重算覆盖合格结论 | 字节级定向替换+闭包外逐项冻结 | `app/modules/m8_correction/rules.py` | `tests/test_correction.py::test_outside_closure_conclusions_are_frozen` |
+| TRAP-31 | 只补单行致复检悬空 | 依赖复检仍REFERENCE | relation依赖闭包一并重放 | `app/modules/m8_correction/rules.py` | `tests/test_correction.py::test_replay_resolves_target_and_dependent_retest_closure` |
+| TRAP-32 | 借补正改换样本/范围 | 身份字段被悄悄改写 | 身份/关联字段冻结判SCOPE | `app/modules/m8_correction/rules.py` | `tests/test_correction.py::test_frozen_identity_fields_cannot_be_altered` |
+| TRAP-33 | 重复补正产生多批次 | 每次提交新建run | 基线+目标+内容指纹幂等 | `app/store.py` | `tests/test_correction.py::test_http_apply_preview_idempotent_and_rollback` |
 
 ## 对账规则
 
